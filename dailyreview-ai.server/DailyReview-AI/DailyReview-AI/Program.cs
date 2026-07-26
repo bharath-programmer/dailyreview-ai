@@ -1,4 +1,6 @@
 using DailyReview.Core.GitHub;
+using DailyReview.Core.Review;
+using DailyReview.Core.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +19,14 @@ builder.Services.AddSingleton<GitHubAppAuthenticator>(serviceProvider =>
 
     return new GitHubAppAuthenticator(appId, privateKeyPath, httpClient);
 });
+builder.Services.AddScoped<GitHubClient>();
+builder.Services.AddScoped<ReviewPromptBuilder>();
+builder.Services.AddScoped<ReviewResponseParser>();
+builder.Services.AddScoped<DiffContextBuilder>();
+builder.Services.AddScoped<GroqReviewClient>();
+
+// Active review provider. Replace MockReviewClient with GroqReviewClient to enable live Groq reviews.
+builder.Services.AddScoped<IReviewModelClient, MockReviewClient>();
 
 
 
@@ -28,6 +38,7 @@ app.UseHttpsRedirection();
 
 app.UseAuthorization();
 
+app.MapGet("/", () => Results.Text("DailyReview.ai is running.", "text/plain"));
 app.MapControllers();
 
 app.Run();
