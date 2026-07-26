@@ -101,6 +101,85 @@ public sealed class GitHubClient
         }
     }
 
+    public async Task<long?> PostReviewStartedCommentAsync(
+        long installationId,
+        string owner,
+        string repo,
+        int prNumber,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var token = await _authenticator.GetInstallationTokenAsync(installationId, ct);
+            var endpoint = $"{GetRepositoryEndpoint(owner, repo)}/issues/{prNumber}/comments";
+            using var request = CreateRequest(HttpMethod.Post, endpoint, token);
+            request.Content = JsonContent.Create(new
+            {
+                body = "🔍 **DailyReview.ai** is reviewing this pull request..."
+            });
+
+            using var response = await _httpClient.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                await LogFailedResponseAsync("post review-started comment", response, ct);
+                return null;
+            }
+
+            var comment = await response.Content.ReadFromJsonAsync<IssueCommentResponse>(cancellationToken: ct);
+            if (comment is null || comment.Id <= 0)
+            {
+                Trace.TraceError("GitHub returned an invalid review-started comment response.");
+                return null;
+            }
+
+            return comment.Id;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError($"Could not post review-started comment for {owner}/{repo}#{prNumber}: {exception}");
+            return null;
+        }
+    }
+
+    public async Task UpdateReviewStatusCommentAsync(
+        long installationId,
+        string owner,
+        string repo,
+        long commentId,
+        int findingsCount,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var token = await _authenticator.GetInstallationTokenAsync(installationId, ct);
+            var endpoint = $"{GetRepositoryEndpoint(owner, repo)}/issues/comments/{commentId}";
+            var body = findingsCount == 0
+                ? "✅ **DailyReview.ai** review complete — no issues found."
+                : $"✅ **DailyReview.ai** review complete — {findingsCount} finding(s) posted below.";
+
+            using var request = CreateRequest(HttpMethod.Patch, endpoint, token);
+            request.Content = JsonContent.Create(new { body });
+
+            using var response = await _httpClient.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                await LogFailedResponseAsync("update review-status comment", response, ct);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError($"Could not update review-status comment {commentId} for {owner}/{repo}: {exception}");
+        }
+    }
+
     private async Task<PullRequestResponse?> GetPullRequestAsync(
         string token,
         string owner,
@@ -160,7 +239,10 @@ public sealed class GitHubClient
     }
 
     private static string GetPullRequestEndpoint(string owner, string repo, int prNumber) =>
-        $"{GitHubApiBaseUrl}/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repo)}/pulls/{prNumber}";
+        $"{GetRepositoryEndpoint(owner, repo)}/pulls/{prNumber}";
+
+    private static string GetRepositoryEndpoint(string owner, string repo) =>
+        $"{GitHubApiBaseUrl}/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repo)}";
 
     private static string? GetNextPageUrl(HttpResponseHeaders headers)
     {
@@ -202,4 +284,7 @@ public sealed class GitHubClient
         [property: JsonPropertyName("patch")] string? Patch,
         [property: JsonPropertyName("additions")] int Additions,
         [property: JsonPropertyName("deletions")] int Deletions);
+
+    private sealed record IssueCommentResponse(
+        [property: JsonPropertyName("id")] long Id);
 }

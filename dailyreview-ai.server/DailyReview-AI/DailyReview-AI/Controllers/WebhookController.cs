@@ -89,6 +89,12 @@ public sealed class WebhookController : ControllerBase
             }
 
             var pullRequestDetails = details!;
+            var statusCommentId = await _gitHubClient.PostReviewStartedCommentAsync(
+                pullRequestDetails.InstallationId,
+                pullRequestDetails.Owner,
+                pullRequestDetails.Repository,
+                pullRequestDetails.PullRequestNumber,
+                ct);
 
             var pullRequestInfo = await _gitHubClient.GetPullRequestFilesAsync(
                 pullRequestDetails.InstallationId,
@@ -102,14 +108,30 @@ public sealed class WebhookController : ControllerBase
             var reviewResult = await _reviewModelClient.ReviewAsync(prompt, ct);
             var validatedReviewResult = _reviewResponseParser.FilterToValidLines(reviewResult, validLines);
 
-            await _gitHubClient.PostReviewCommentsAsync(
-                pullRequestDetails.InstallationId,
-                pullRequestDetails.Owner,
-                pullRequestDetails.Repository,
-                pullRequestDetails.PullRequestNumber,
-                pullRequestDetails.CommitSha,
-                validatedReviewResult.Findings,
-                ct);
+            try
+            {
+                await _gitHubClient.PostReviewCommentsAsync(
+                    pullRequestDetails.InstallationId,
+                    pullRequestDetails.Owner,
+                    pullRequestDetails.Repository,
+                    pullRequestDetails.PullRequestNumber,
+                    pullRequestDetails.CommitSha,
+                    validatedReviewResult.Findings,
+                    ct);
+            }
+            finally
+            {
+                if (statusCommentId is long commentId)
+                {
+                    await _gitHubClient.UpdateReviewStatusCommentAsync(
+                        pullRequestDetails.InstallationId,
+                        pullRequestDetails.Owner,
+                        pullRequestDetails.Repository,
+                        commentId,
+                        validatedReviewResult.Findings.Count,
+                        ct);
+                }
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
