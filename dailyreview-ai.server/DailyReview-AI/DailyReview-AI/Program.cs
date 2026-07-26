@@ -23,12 +23,9 @@ builder.Services.AddScoped<GitHubClient>();
 builder.Services.AddScoped<ReviewPromptBuilder>();
 builder.Services.AddScoped<ReviewResponseParser>();
 builder.Services.AddScoped<DiffContextBuilder>();
-builder.Services.AddScoped<GroqReviewClient>();
 
-// Active review provider. Replace MockReviewClient with GroqReviewClient to enable live Groq reviews.
-//builder.Services.AddScoped<IReviewModelClient, MockReviewClient>();
-
-builder.Services.AddScoped<IReviewModelClient, GroqReviewClient>();
+// For local mock testing, swap OpenAiCompatibleReviewClient with MockReviewClient on this line.
+builder.Services.AddScoped<IReviewModelClient, OpenAiCompatibleReviewClient>();
 
 var app = builder.Build();
 
