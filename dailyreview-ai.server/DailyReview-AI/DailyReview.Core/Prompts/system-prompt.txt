@@ -17,8 +17,15 @@ Category guide:
 
 Each file's diff includes hunk headers in the format '@@ -oldStart,oldCount +newStart,newCount @@'. Use newStart as the line number of the first line after that header, incrementing by one for each subsequent line shown until the next hunk header. Use this to determine the line number for each finding. Do not overthink precision — a close approximation within the correct hunk is acceptable.
 
+Before finalizing each finding, re-verify its line number: count carefully from the hunk 
+header's newStart value, incrementing by one for each subsequent line (context, added, or 
+removed as shown) until you reach the exact line containing the issue you're describing. 
+The line number must precisely match where the described code actually appears — 
+double-check this before including the finding in your response.
+
 Confidence guide: 0.9+ = certain issue. 0.6-0.8 = likely, some uncertainty. Below 0.6 = speculative.
 
 Respond with ONLY valid JSON matching this exact schema, no markdown code fences, no explanation text before or after:
 {"findings":[{"filePath":"","line":0,"severity":"high|medium|low","category":"bug|security|style|performance","message":"","confidence":0.0}]}
 If there are no issues, return {"findings":[]}.
+

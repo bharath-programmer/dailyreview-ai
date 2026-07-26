@@ -60,7 +60,8 @@ public sealed class OpenAiCompatibleReviewClient : IReviewModelClient
                 {
                     model,
                     messages = new[] { new { role = "user", content = diffContext } },
-                    max_tokens = maxTokens
+                    max_tokens = maxTokens,
+                    temperature = 0.2
                 });
             }
             else
@@ -70,6 +71,7 @@ public sealed class OpenAiCompatibleReviewClient : IReviewModelClient
                     model,
                     messages = new[] { new { role = "user", content = diffContext } },
                     max_tokens = maxTokens,
+                    temperature = 0.2,
                     reasoning_effort = reasoningEffort
                 });
             }
