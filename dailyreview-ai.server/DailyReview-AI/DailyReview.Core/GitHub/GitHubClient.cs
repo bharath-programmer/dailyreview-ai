@@ -85,6 +85,7 @@ public sealed class GitHubClient
             request.Content = JsonContent.Create(review);
 
             using var response = await _httpClient.SendAsync(request, ct);
+            var aa = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
             {
                 await LogFailedResponseAsync("post pull-request review", response, ct);

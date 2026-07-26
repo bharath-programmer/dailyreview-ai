@@ -56,6 +56,8 @@ public sealed class GroqReviewClient : IReviewModelClient
             request.Content = JsonContent.Create(new
             {
                 model,
+                reasoning_effort = "low",
+                max_tokens = 2000,
                 messages = new[]
                 {
                     new { role = "user", content = diffContext }
@@ -63,6 +65,8 @@ public sealed class GroqReviewClient : IReviewModelClient
             });
 
             using var response = await _httpClient.SendAsync(request, ct);
+            var rawJson = await response.Content.ReadAsStringAsync();
+            _logger.LogWarning("Raw Groq response: {Raw}", rawJson);
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync(ct);

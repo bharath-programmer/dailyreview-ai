@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using DailyReview.Core.GitHub;
 
 namespace DailyReview.Core.Review;
@@ -7,6 +8,41 @@ public sealed class DiffContextBuilder
 {
     private const int MaxPatchLines = 300;
     private const int MaxContentCharacters = 24_000;
+    private static readonly Regex HunkHeaderPattern = new(
+        "@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,(\\d+))? @@",
+        RegexOptions.Compiled);
+
+    public Dictionary<string, HashSet<int>> GetValidLinesPerFile(PullRequestInfo prInfo)
+    {
+        ArgumentNullException.ThrowIfNull(prInfo);
+
+        var validLines = new Dictionary<string, HashSet<int>>(StringComparer.Ordinal);
+        foreach (var file in prInfo.Files)
+        {
+            if (file.Patch is null)
+            {
+                continue;
+            }
+
+            if (!validLines.TryGetValue(file.FilePath, out var fileLines))
+            {
+                fileLines = [];
+                validLines[file.FilePath] = fileLines;
+            }
+
+            foreach (Match hunk in HunkHeaderPattern.Matches(file.Patch))
+            {
+                var newStart = int.Parse(hunk.Groups[1].Value);
+                var newCount = hunk.Groups[2].Success ? int.Parse(hunk.Groups[2].Value) : 1;
+                for (var line = newStart; line < newStart + newCount; line++)
+                {
+                    fileLines.Add(line);
+                }
+            }
+        }
+
+        return validLines;
+    }
 
     public string BuildContext(PullRequestInfo prInfo)
     {

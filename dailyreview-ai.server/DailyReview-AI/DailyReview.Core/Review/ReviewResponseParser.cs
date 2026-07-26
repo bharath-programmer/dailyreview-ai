@@ -35,6 +35,32 @@ public sealed class ReviewResponseParser
         }
     }
 
+    public ReviewResult FilterToValidLines(
+        ReviewResult result,
+        Dictionary<string, HashSet<int>> validLines)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(validLines);
+
+        var validFindings = new List<Finding>();
+        foreach (var finding in result.Findings)
+        {
+            if (validLines.TryGetValue(finding.FilePath, out var lines) && lines.Contains(finding.Line))
+            {
+                validFindings.Add(finding);
+                continue;
+            }
+
+            _logger.LogWarning(
+                "Dropped finding with unresolved diff position: {FilePath}:{Line} - {Message}",
+                finding.FilePath,
+                finding.Line,
+                finding.Message);
+        }
+
+        return new ReviewResult(validFindings);
+    }
+
     private static string ExtractJson(string modelOutput)
     {
         var output = modelOutput.Trim();

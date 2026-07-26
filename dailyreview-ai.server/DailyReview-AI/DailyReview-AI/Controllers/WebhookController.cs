@@ -16,6 +16,7 @@ public sealed class WebhookController : ControllerBase
     private readonly GitHubClient _gitHubClient;
     private readonly DiffContextBuilder _diffContextBuilder;
     private readonly ReviewPromptBuilder _reviewPromptBuilder;
+    private readonly ReviewResponseParser _reviewResponseParser;
     private readonly IReviewModelClient _reviewModelClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<WebhookController> _logger;
@@ -24,6 +25,7 @@ public sealed class WebhookController : ControllerBase
         GitHubClient gitHubClient,
         DiffContextBuilder diffContextBuilder,
         ReviewPromptBuilder reviewPromptBuilder,
+        ReviewResponseParser reviewResponseParser,
         IReviewModelClient reviewModelClient,
         IConfiguration configuration,
         ILogger<WebhookController> logger)
@@ -31,6 +33,7 @@ public sealed class WebhookController : ControllerBase
         ArgumentNullException.ThrowIfNull(gitHubClient);
         ArgumentNullException.ThrowIfNull(diffContextBuilder);
         ArgumentNullException.ThrowIfNull(reviewPromptBuilder);
+        ArgumentNullException.ThrowIfNull(reviewResponseParser);
         ArgumentNullException.ThrowIfNull(reviewModelClient);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(logger);
@@ -38,6 +41,7 @@ public sealed class WebhookController : ControllerBase
         _gitHubClient = gitHubClient;
         _diffContextBuilder = diffContextBuilder;
         _reviewPromptBuilder = reviewPromptBuilder;
+        _reviewResponseParser = reviewResponseParser;
         _reviewModelClient = reviewModelClient;
         _configuration = configuration;
         _logger = logger;
@@ -93,8 +97,10 @@ public sealed class WebhookController : ControllerBase
                 pullRequestDetails.PullRequestNumber,
                 ct);
             var context = _diffContextBuilder.BuildContext(pullRequestInfo);
+            var validLines = _diffContextBuilder.GetValidLinesPerFile(pullRequestInfo);
             var prompt = _reviewPromptBuilder.BuildPrompt(context);
             var reviewResult = await _reviewModelClient.ReviewAsync(prompt, ct);
+            var validatedReviewResult = _reviewResponseParser.FilterToValidLines(reviewResult, validLines);
 
             await _gitHubClient.PostReviewCommentsAsync(
                 pullRequestDetails.InstallationId,
@@ -102,7 +108,7 @@ public sealed class WebhookController : ControllerBase
                 pullRequestDetails.Repository,
                 pullRequestDetails.PullRequestNumber,
                 pullRequestDetails.CommitSha,
-                reviewResult.Findings,
+                validatedReviewResult.Findings,
                 ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

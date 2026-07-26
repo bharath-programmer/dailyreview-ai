@@ -26,9 +26,9 @@ builder.Services.AddScoped<DiffContextBuilder>();
 builder.Services.AddScoped<GroqReviewClient>();
 
 // Active review provider. Replace MockReviewClient with GroqReviewClient to enable live Groq reviews.
-builder.Services.AddScoped<IReviewModelClient, MockReviewClient>();
+//builder.Services.AddScoped<IReviewModelClient, MockReviewClient>();
 
-
+builder.Services.AddScoped<IReviewModelClient, GroqReviewClient>();
 
 var app = builder.Build();
 
