@@ -4,6 +4,14 @@ using DailyReview.Core.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Render supplies PORT at runtime. Respect ASPNETCORE_URLS when it is explicitly configured.
+var renderPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(renderPort) &&
+    string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{renderPort}");
+}
+
 // Add services to the container.
 
 builder.Services.AddControllers();

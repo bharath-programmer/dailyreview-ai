@@ -1,0 +1,26 @@
+# Source control and local IDE state
+.git
+.gitignore
+.vs
+.vscode
+*.suo
+*.user
+
+# Build output
+**/bin
+**/obj
+
+# Local development-only files
+**/Properties/launchSettings.json
+**/*.http
+DailyReview-AI/appsettings.Development.json
+
+# Credentials and secrets must be supplied by Render at runtime.
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+secrets
+githubapp
