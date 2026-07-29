@@ -12,6 +12,7 @@ public sealed class OpenAiCompatibleReviewClient : IReviewModelClient
 {
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
+    private readonly string _configurationSection;
     private readonly ReviewResponseParser _responseParser;
     private readonly ILogger<OpenAiCompatibleReviewClient> _logger;
 
@@ -19,34 +20,38 @@ public sealed class OpenAiCompatibleReviewClient : IReviewModelClient
         HttpClient httpClient,
         IConfiguration configuration,
         ReviewResponseParser responseParser,
-        ILogger<OpenAiCompatibleReviewClient> logger)
+        ILogger<OpenAiCompatibleReviewClient> logger,
+        string configurationSection = "LlmProvider")
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(responseParser);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentException.ThrowIfNullOrWhiteSpace(configurationSection);
 
         _httpClient = httpClient;
         _configuration = configuration;
+        _configurationSection = configurationSection;
         _responseParser = responseParser;
         _logger = logger;
     }
 
     public async Task<ReviewResult> ReviewAsync(string diffContext, CancellationToken ct = default)
     {
-        var baseUrl = _configuration["LlmProvider:BaseUrl"];
-        var apiKey = _configuration["LlmProvider:ApiKey"];
-        var model = _configuration["LlmProvider:Model"];
+        var providerConfiguration = _configuration.GetSection(_configurationSection);
+        var baseUrl = providerConfiguration["BaseUrl"];
+        var apiKey = providerConfiguration["ApiKey"];
+        var model = providerConfiguration["Model"];
         if (string.IsNullOrWhiteSpace(baseUrl) ||
             string.IsNullOrWhiteSpace(apiKey) ||
             string.IsNullOrWhiteSpace(model))
         {
-            _logger.LogError("LlmProvider:BaseUrl, LlmProvider:ApiKey, and LlmProvider:Model must be configured.");
-            return EmptyResult();
+            _logger.LogError("{ProviderSection}:BaseUrl, ApiKey, and Model must be configured.", _configurationSection);
+            return FailureResult("LLM provider is not configured");
         }
 
-        var reasoningEffort = _configuration["LlmProvider:ReasoningEffort"];
-        var maxTokens = int.TryParse(_configuration["LlmProvider:MaxTokens"], out var configuredMaxTokens)
+        var reasoningEffort = providerConfiguration["ReasoningEffort"];
+        var maxTokens = int.TryParse(providerConfiguration["MaxTokens"], out var configuredMaxTokens)
             ? configuredMaxTokens
             : 2000;
 
@@ -84,7 +89,7 @@ public sealed class OpenAiCompatibleReviewClient : IReviewModelClient
                     "LLM review request failed with status {StatusCode}: {ErrorBody}",
                     (int)response.StatusCode,
                     errorBody);
-                return EmptyResult();
+                return FailureResult(GetHttpFailureReason(response.StatusCode));
             }
 
             var completion = await response.Content.ReadFromJsonAsync<ChatCompletionResponse>(cancellationToken: ct);
@@ -92,7 +97,7 @@ public sealed class OpenAiCompatibleReviewClient : IReviewModelClient
             if (string.IsNullOrWhiteSpace(content))
             {
                 _logger.LogError("LLM response did not contain choices[0].message.content.");
-                return EmptyResult();
+                return FailureResult("response could not be parsed");
             }
 
             return _responseParser.Parse(content);
@@ -101,14 +106,26 @@ public sealed class OpenAiCompatibleReviewClient : IReviewModelClient
         {
             throw;
         }
+        catch (OperationCanceledException exception)
+        {
+            _logger.LogError(exception, "LLM review request timed out.");
+            return FailureResult("request timed out");
+        }
         catch (Exception exception)
         {
             _logger.LogError(exception, "LLM review request failed unexpectedly.");
-            return EmptyResult();
+            return FailureResult("LLM request failed");
         }
     }
 
-    private static ReviewResult EmptyResult() => new([]);
+    private static ReviewResult FailureResult(string reason) => new([], Success: false, FailureReason: reason);
+
+    private static string GetHttpFailureReason(System.Net.HttpStatusCode statusCode) =>
+        statusCode == System.Net.HttpStatusCode.TooManyRequests
+            ? "rate_limit_exceeded"
+            : (int)statusCode >= 500
+                ? "LLM provider is temporarily unavailable"
+                : "LLM request failed";
 
     private sealed record ChatCompletionResponse(
         [property: JsonPropertyName("choices")] List<ChatChoice>? Choices);

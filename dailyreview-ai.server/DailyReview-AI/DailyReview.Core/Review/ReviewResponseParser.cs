@@ -24,14 +24,20 @@ public sealed class ReviewResponseParser
                 PropertyNameCaseInsensitive = true
             });
 
-            return new ReviewResult(result?.Findings
-                ?.Where(finding => finding.Confidence >= 0.5)
-                .ToList() ?? []);
+            if (result?.Findings is null)
+            {
+                throw new JsonException("The response did not contain a findings array.");
+            }
+
+            return new ReviewResult(
+                result.Findings.Where(finding => finding.Confidence >= 0.5).ToList(),
+                Success: true,
+                FailureReason: null);
         }
         catch (Exception exception)
         {
             _logger.LogWarning(exception, "Could not parse review model output: {ModelOutput}", modelOutput);
-            return new ReviewResult([]);
+            return new ReviewResult([], Success: false, FailureReason: "response could not be parsed");
         }
     }
 
@@ -58,7 +64,7 @@ public sealed class ReviewResponseParser
                 finding.Message);
         }
 
-        return new ReviewResult(validFindings);
+        return new ReviewResult(validFindings, result.Success, result.FailureReason, result.UsedFallback);
     }
 
     private static string ExtractJson(string modelOutput)

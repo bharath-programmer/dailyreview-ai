@@ -17,19 +17,46 @@ public sealed class GitHubAppAuthenticator
     private readonly SigningCredentials _signingCredentials;
 
     public GitHubAppAuthenticator(string appId, string privateKeyPath, HttpClient httpClient)
+        : this(appId, privateKey: null, privateKeyPath, httpClient)
+    {
+    }
+
+    public GitHubAppAuthenticator(string appId, string? privateKey, string? privateKeyPath, HttpClient httpClient)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(appId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(privateKeyPath);
         ArgumentNullException.ThrowIfNull(httpClient);
 
         _appId = appId;
         _httpClient = httpClient;
 
         var rsa = RSA.Create();
-        rsa.ImportFromPem(File.ReadAllText(privateKeyPath));
+        rsa.ImportFromPem(LoadPrivateKey(privateKey, privateKeyPath));
         _signingCredentials = new SigningCredentials(
             new RsaSecurityKey(rsa),
             SecurityAlgorithms.RsaSha256);
+    }
+
+    private static string LoadPrivateKey(string? privateKey, string? privateKeyPath)
+    {
+        if (!string.IsNullOrWhiteSpace(privateKey))
+        {
+            return privateKey;
+        }
+
+        if (string.IsNullOrWhiteSpace(privateKeyPath))
+        {
+            throw new InvalidOperationException(
+                "Either GitHubApp:PrivateKey or GitHubApp:PrivateKeyPath must be configured.");
+        }
+
+        if (!File.Exists(privateKeyPath))
+        {
+            throw new FileNotFoundException(
+                "GitHubApp:PrivateKeyPath does not point to an existing PEM file.",
+                privateKeyPath);
+        }
+
+        return File.ReadAllText(privateKeyPath);
     }
 
     public async Task<string> GetInstallationTokenAsync(long installationId, CancellationToken ct = default)

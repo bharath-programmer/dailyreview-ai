@@ -4,10 +4,12 @@ using DailyReview.Core.GitHub;
 
 namespace DailyReview.Core.Review;
 
+public record ContextBuildResult(string Context, int SkippedFilesForSize, int SkippedFilesVendor);
+
 public sealed class DiffContextBuilder
 {
     private const int MaxPatchLines = 300;
-    private const int MaxContentCharacters = 24_000;
+    private const int MaxContentCharacters = 16_000;
     private static readonly Regex HunkHeaderPattern = new(
         "@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,(\\d+))? @@",
         RegexOptions.Compiled);
@@ -44,7 +46,7 @@ public sealed class DiffContextBuilder
         return validLines;
     }
 
-    public string BuildContext(PullRequestInfo prInfo)
+    public ContextBuildResult BuildContext(PullRequestInfo prInfo)
     {
         ArgumentNullException.ThrowIfNull(prInfo);
 
@@ -61,8 +63,10 @@ public sealed class DiffContextBuilder
             .Append("\n\n");
 
         var reviewableFiles = prInfo.Files.Where(file => !IsGeneratedOrVendorFile(file.FilePath)).ToList();
+        var skippedFilesVendor = prInfo.Files.Count - reviewableFiles.Count;
         var includedCharacterCount = 0;
         var includedAnyFile = false;
+        var skippedFilesForSize = 0;
 
         for (var index = 0; index < reviewableFiles.Count; index++)
         {
@@ -72,8 +76,8 @@ public sealed class DiffContextBuilder
 
             if (includedCharacterCount + fileContent.Length > MaxContentCharacters)
             {
-                var omittedFiles = reviewableFiles.Count - index;
-                context.Append($"[{omittedFiles} additional files not included due to size limits]");
+                skippedFilesForSize = reviewableFiles.Count - index;
+                context.Append($"[{skippedFilesForSize} additional files not included due to size limits]");
                 break;
             }
 
@@ -87,7 +91,7 @@ public sealed class DiffContextBuilder
             context.Append("No reviewable file changes found.");
         }
 
-        return context.ToString();
+        return new ContextBuildResult(context.ToString(), skippedFilesForSize, skippedFilesVendor);
     }
 
     private static bool IsGeneratedOrVendorFile(string filePath)

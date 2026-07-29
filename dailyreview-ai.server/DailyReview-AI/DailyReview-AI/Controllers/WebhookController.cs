@@ -1,4 +1,5 @@
 using DailyReview.Core.GitHub;
+using DailyReview.Core.Models;
 using DailyReview.Core.Review;
 using DailyReview.Core.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -96,20 +97,22 @@ public sealed class WebhookController : ControllerBase
                 pullRequestDetails.PullRequestNumber,
                 ct);
 
-            var pullRequestInfo = await _gitHubClient.GetPullRequestFilesAsync(
-                pullRequestDetails.InstallationId,
-                pullRequestDetails.Owner,
-                pullRequestDetails.Repository,
-                pullRequestDetails.PullRequestNumber,
-                ct);
-            var context = _diffContextBuilder.BuildContext(pullRequestInfo);
-            var validLines = _diffContextBuilder.GetValidLinesPerFile(pullRequestInfo);
-            var prompt = _reviewPromptBuilder.BuildPrompt(context);
-            var reviewResult = await _reviewModelClient.ReviewAsync(prompt, ct);
-            var validatedReviewResult = _reviewResponseParser.FilterToValidLines(reviewResult, validLines);
-
+            var contextResult = new ContextBuildResult(string.Empty, 0, 0);
+            var validatedReviewResult = new ReviewResult([], Success: false, FailureReason: "review processing failed");
             try
             {
+                var pullRequestInfo = await _gitHubClient.GetPullRequestFilesAsync(
+                    pullRequestDetails.InstallationId,
+                    pullRequestDetails.Owner,
+                    pullRequestDetails.Repository,
+                    pullRequestDetails.PullRequestNumber,
+                    ct);
+                contextResult = _diffContextBuilder.BuildContext(pullRequestInfo);
+                var validLines = _diffContextBuilder.GetValidLinesPerFile(pullRequestInfo);
+                var prompt = _reviewPromptBuilder.BuildPrompt(contextResult.Context);
+                var reviewResult = await _reviewModelClient.ReviewAsync(prompt, ct);
+                validatedReviewResult = _reviewResponseParser.FilterToValidLines(reviewResult, validLines);
+
                 await _gitHubClient.PostReviewCommentsAsync(
                     pullRequestDetails.InstallationId,
                     pullRequestDetails.Owner,
@@ -128,7 +131,7 @@ public sealed class WebhookController : ControllerBase
                         pullRequestDetails.Owner,
                         pullRequestDetails.Repository,
                         commentId,
-                        validatedReviewResult.Findings.Count,
+                        BuildStatusMessage(validatedReviewResult, contextResult.SkippedFilesForSize),
                         ct);
                 }
             }
@@ -161,6 +164,31 @@ public sealed class WebhookController : ControllerBase
         return CryptographicOperations.FixedTimeEquals(
             Encoding.ASCII.GetBytes(expectedSignature),
             Encoding.ASCII.GetBytes(signature));
+    }
+
+    private static string BuildStatusMessage(ReviewResult reviewResult, int skippedFilesForSize)
+    {
+        if (!reviewResult.Success)
+        {
+            return $"⚠️ Review could not be completed — {reviewResult.FailureReason ?? "an unknown error occurred"}. " +
+                   "This can happen on very large PRs; try again shortly or review manually.";
+        }
+
+        var status = reviewResult.Findings.Count == 0
+            ? "✅ Review complete — no issues found."
+            : $"✅ Review complete — {reviewResult.Findings.Count} finding(s) posted below.";
+
+        if (skippedFilesForSize > 0)
+        {
+            status += $" (Note: {skippedFilesForSize} large file(s) were skipped due to size limits.)";
+        }
+
+        if (reviewResult.UsedFallback)
+        {
+            status += " (Note: primary AI provider hit its rate limit; fallback provider was used instead.)";
+        }
+
+        return status;
     }
 
     private static bool IsReviewAction(string? action) =>

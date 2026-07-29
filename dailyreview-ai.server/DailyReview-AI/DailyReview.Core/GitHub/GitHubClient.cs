@@ -150,19 +150,15 @@ public sealed class GitHubClient
         string owner,
         string repo,
         long commentId,
-        int findingsCount,
+        string statusMessage,
         CancellationToken ct = default)
     {
         try
         {
             var token = await _authenticator.GetInstallationTokenAsync(installationId, ct);
             var endpoint = $"{GetRepositoryEndpoint(owner, repo)}/issues/comments/{commentId}";
-            var body = findingsCount == 0
-                ? "✅ **DailyReview.ai** review complete — no issues found."
-                : $"✅ **DailyReview.ai** review complete — {findingsCount} finding(s) posted below.";
-
             using var request = CreateRequest(HttpMethod.Patch, endpoint, token);
-            request.Content = JsonContent.Create(new { body });
+            request.Content = JsonContent.Create(new { body = statusMessage });
 
             using var response = await _httpClient.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
