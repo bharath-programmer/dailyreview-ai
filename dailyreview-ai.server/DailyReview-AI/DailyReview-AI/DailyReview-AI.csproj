@@ -7,4 +7,8 @@
     <RootNamespace>DailyReview_AI</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\DailyReview.Core\DailyReview.Core.csproj" />
+  </ItemGroup>
+
 </Project>
