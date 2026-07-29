@@ -16,7 +16,6 @@ public sealed class WebhookController : ControllerBase
 {
     private readonly GitHubClient _gitHubClient;
     private readonly DiffContextBuilder _diffContextBuilder;
-    private readonly ReviewPromptBuilder _reviewPromptBuilder;
     private readonly ReviewResponseParser _reviewResponseParser;
     private readonly IReviewModelClient _reviewModelClient;
     private readonly IConfiguration _configuration;
@@ -25,7 +24,6 @@ public sealed class WebhookController : ControllerBase
     public WebhookController(
         GitHubClient gitHubClient,
         DiffContextBuilder diffContextBuilder,
-        ReviewPromptBuilder reviewPromptBuilder,
         ReviewResponseParser reviewResponseParser,
         IReviewModelClient reviewModelClient,
         IConfiguration configuration,
@@ -33,7 +31,6 @@ public sealed class WebhookController : ControllerBase
     {
         ArgumentNullException.ThrowIfNull(gitHubClient);
         ArgumentNullException.ThrowIfNull(diffContextBuilder);
-        ArgumentNullException.ThrowIfNull(reviewPromptBuilder);
         ArgumentNullException.ThrowIfNull(reviewResponseParser);
         ArgumentNullException.ThrowIfNull(reviewModelClient);
         ArgumentNullException.ThrowIfNull(configuration);
@@ -41,7 +38,6 @@ public sealed class WebhookController : ControllerBase
 
         _gitHubClient = gitHubClient;
         _diffContextBuilder = diffContextBuilder;
-        _reviewPromptBuilder = reviewPromptBuilder;
         _reviewResponseParser = reviewResponseParser;
         _reviewModelClient = reviewModelClient;
         _configuration = configuration;
@@ -109,8 +105,7 @@ public sealed class WebhookController : ControllerBase
                     ct);
                 contextResult = _diffContextBuilder.BuildContext(pullRequestInfo);
                 var validLines = _diffContextBuilder.GetValidLinesPerFile(pullRequestInfo);
-                var prompt = _reviewPromptBuilder.BuildPrompt(contextResult.Context);
-                var reviewResult = await _reviewModelClient.ReviewAsync(prompt, ct);
+                var reviewResult = await _reviewModelClient.ReviewAsync(contextResult.Context, ct);
                 validatedReviewResult = _reviewResponseParser.FilterToValidLines(reviewResult, validLines);
 
                 await _gitHubClient.PostReviewCommentsAsync(

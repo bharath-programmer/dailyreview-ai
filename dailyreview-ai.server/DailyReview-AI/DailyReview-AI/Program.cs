@@ -49,6 +49,7 @@ builder.Services.AddKeyedScoped<IReviewModelClient>("primary", (serviceProvider,
         serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(),
         serviceProvider.GetRequiredService<IConfiguration>(),
         serviceProvider.GetRequiredService<ReviewResponseParser>(),
+        serviceProvider.GetRequiredService<ReviewPromptBuilder>(),
         serviceProvider.GetRequiredService<ILogger<OpenAiCompatibleReviewClient>>(),
         "LlmProvider"));
 builder.Services.AddKeyedScoped<IReviewModelClient>("fallback", (serviceProvider, _) =>
@@ -56,6 +57,7 @@ builder.Services.AddKeyedScoped<IReviewModelClient>("fallback", (serviceProvider
         serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(),
         serviceProvider.GetRequiredService<IConfiguration>(),
         serviceProvider.GetRequiredService<ReviewResponseParser>(),
+        serviceProvider.GetRequiredService<ReviewPromptBuilder>(),
         serviceProvider.GetRequiredService<ILogger<OpenAiCompatibleReviewClient>>(),
         "LlmProvider2"));
 builder.Services.AddScoped<IReviewModelClient>(serviceProvider =>

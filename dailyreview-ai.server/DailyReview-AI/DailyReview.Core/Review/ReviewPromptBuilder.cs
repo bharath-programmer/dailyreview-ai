@@ -20,7 +20,7 @@ public sealed class ReviewPromptBuilder
 
     public string BuildPrompt(string diffContext) => $"{GetSystemPrompt()}\n\n{diffContext}";
 
-    private string GetSystemPrompt()
+    public string GetSystemPrompt()
     {
         var configuredPrompt = _configuration["SystemPrompt:Override"];
         if (!string.IsNullOrWhiteSpace(configuredPrompt))

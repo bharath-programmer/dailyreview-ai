@@ -14,18 +14,21 @@ public sealed class OpenAiCompatibleReviewClient : IReviewModelClient
     private readonly IConfiguration _configuration;
     private readonly string _configurationSection;
     private readonly ReviewResponseParser _responseParser;
+    private readonly ReviewPromptBuilder _promptBuilder;
     private readonly ILogger<OpenAiCompatibleReviewClient> _logger;
 
     public OpenAiCompatibleReviewClient(
         HttpClient httpClient,
         IConfiguration configuration,
         ReviewResponseParser responseParser,
+        ReviewPromptBuilder promptBuilder,
         ILogger<OpenAiCompatibleReviewClient> logger,
         string configurationSection = "LlmProvider")
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(responseParser);
+        ArgumentNullException.ThrowIfNull(promptBuilder);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentException.ThrowIfNullOrWhiteSpace(configurationSection);
 
@@ -33,6 +36,7 @@ public sealed class OpenAiCompatibleReviewClient : IReviewModelClient
         _configuration = configuration;
         _configurationSection = configurationSection;
         _responseParser = responseParser;
+        _promptBuilder = promptBuilder;
         _logger = logger;
     }
 
@@ -54,32 +58,23 @@ public sealed class OpenAiCompatibleReviewClient : IReviewModelClient
         var maxTokens = int.TryParse(providerConfiguration["MaxTokens"], out var configuredMaxTokens)
             ? configuredMaxTokens
             : 2000;
+        var useJsonMode = bool.TryParse(providerConfiguration["JsonMode"], out var configuredJsonMode) &&
+                          configuredJsonMode;
 
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, baseUrl);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-            if (string.IsNullOrWhiteSpace(reasoningEffort))
-            {
-                request.Content = JsonContent.Create(new
-                {
-                    model,
-                    messages = new[] { new { role = "user", content = diffContext } },
-                    max_tokens = maxTokens,
-                    temperature = 0.2
-                });
-            }
-            else
-            {
-                request.Content = JsonContent.Create(new
-                {
-                    model,
-                    messages = new[] { new { role = "user", content = diffContext } },
-                    max_tokens = maxTokens,
-                    temperature = 0.2,
-                    reasoning_effort = reasoningEffort
-                });
-            }
+            request.Content = JsonContent.Create(new ChatCompletionRequest(
+                model,
+                [
+                    new ChatMessageRequest("system", _promptBuilder.GetSystemPrompt()),
+                    new ChatMessageRequest("user", diffContext)
+                ],
+                maxTokens,
+                0.2,
+                string.IsNullOrWhiteSpace(reasoningEffort) ? null : reasoningEffort,
+                useJsonMode ? new JsonResponseFormat("json_object") : null));
 
             using var response = await _httpClient.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
@@ -135,4 +130,19 @@ public sealed class OpenAiCompatibleReviewClient : IReviewModelClient
 
     private sealed record ChatMessage(
         [property: JsonPropertyName("content")] string? Content);
+
+    private sealed record ChatCompletionRequest(
+        [property: JsonPropertyName("model")] string Model,
+        [property: JsonPropertyName("messages")] List<ChatMessageRequest> Messages,
+        [property: JsonPropertyName("max_tokens")] int MaxTokens,
+        [property: JsonPropertyName("temperature")] double Temperature,
+        [property: JsonPropertyName("reasoning_effort"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReasoningEffort,
+        [property: JsonPropertyName("response_format"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonResponseFormat? ResponseFormat);
+
+    private sealed record ChatMessageRequest(
+        [property: JsonPropertyName("role")] string Role,
+        [property: JsonPropertyName("content")] string Content);
+
+    private sealed record JsonResponseFormat(
+        [property: JsonPropertyName("type")] string Type);
 }
