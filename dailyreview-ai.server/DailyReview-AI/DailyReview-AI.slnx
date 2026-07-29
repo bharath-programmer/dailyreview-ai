@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="DailyReview-AI/DailyReview-AI.csproj" />
+  <Project Path="DailyReview.Core/DailyReview.Core.csproj" Id="85bab83c-4532-41b1-8f5b-173d1017507a" />
 </Solution>
